@@ -1,0 +1,14 @@
+target/
+.idea/
+.vscode/
+*.iml
+
+# Generated local certificates and keys
+certs/
+*.key
+*.csr
+*.srl
+*.p12
+
+# Local env files
+.env

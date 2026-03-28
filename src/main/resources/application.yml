@@ -1,0 +1,38 @@
+server:
+  port: ${SERVER_PORT:8443}
+  ssl:
+    enabled: ${TLS_ENABLED:true}
+    key-store: ${TLS_KEYSTORE_PATH:certs/server-keystore.p12}
+    key-store-password: ${TLS_KEYSTORE_PASSWORD:changeit}
+    key-store-type: PKCS12
+    key-alias: ${TLS_KEY_ALIAS:server}
+
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/antivirus}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
+    driver-class-name: ${DB_DRIVER_CLASS_NAME:org.postgresql.Driver}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: true
+    open-in-view: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+security:
+  jwt:
+    access-secret: ${JWT_ACCESS_SECRET:ChangeMeAccessSecretKeyMustHaveAtLeastThirtyTwoChars123}
+    refresh-secret: ${JWT_REFRESH_SECRET:ChangeMeRefreshSecretKeyMustHaveAtLeastThirtyTwoChars123}
+    access-expiration-seconds: ${JWT_ACCESS_EXPIRATION_SECONDS:900}
+    refresh-expiration-seconds: ${JWT_REFRESH_EXPIRATION_SECONDS:604800}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
