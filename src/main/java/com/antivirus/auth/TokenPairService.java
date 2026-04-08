@@ -94,6 +94,8 @@ public class TokenPairService {
         UserSessionEntity session = new UserSessionEntity();
         session.setUser(user);
         session.setTokenJti(UUID.randomUUID().toString());
+        // refresh_token is NOT NULL in DB; set a unique placeholder before first insert.
+        session.setRefreshToken("pending-" + UUID.randomUUID());
         session.setStatus(SessionStatus.ACTIVE);
         session.setIssuedAt(now);
         session.setExpiresAt(now.plusSeconds(jwtProperties.refreshExpirationSeconds()));
