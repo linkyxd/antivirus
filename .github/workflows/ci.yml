@@ -58,10 +58,12 @@ jobs:
           cache: maven
 
       - name: Materialize keystore from GitHub Secret
-        if: ${{ secrets.TLS_KEYSTORE_BASE64 != '' }}
+        env:
+          TLS_KEYSTORE_BASE64: ${{ secrets.TLS_KEYSTORE_BASE64 }}
+        if: ${{ env.TLS_KEYSTORE_BASE64 != '' }}
         run: |
           mkdir -p certs
-          echo "${{ secrets.TLS_KEYSTORE_BASE64 }}" | base64 -d > certs/server-keystore.p12
+          echo "$TLS_KEYSTORE_BASE64" | base64 -d > certs/server-keystore.p12
 
       - name: Package
         env:
