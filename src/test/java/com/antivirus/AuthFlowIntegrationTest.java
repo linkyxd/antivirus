@@ -27,7 +27,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "DB_USERNAME=sa",
         "DB_PASSWORD=",
         "DB_DRIVER_CLASS_NAME=org.h2.Driver",
-        "spring.jpa.hibernate.ddl-auto=validate"
+        "spring.jpa.hibernate.ddl-auto=validate",
+        "server.ssl.key-store=classpath:test-keystore.p12",
+        "server.ssl.key-store-password=changeit",
+        "server.ssl.key-alias=server"
 })
 class AuthFlowIntegrationTest {
 

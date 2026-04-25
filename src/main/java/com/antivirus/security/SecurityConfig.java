@@ -40,6 +40,12 @@ public class SecurityConfig {
                                 "/api/auth/logout"
                         ).permitAll()
                         .requestMatchers("/actuator/health").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/licenses").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST,
+                                "/api/licenses/activate",
+                                "/api/licenses/check",
+                                "/api/licenses/renew"
+                        ).authenticated()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )

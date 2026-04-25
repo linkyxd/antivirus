@@ -28,6 +28,9 @@ public class UserEntity {
     @Column(nullable = false, length = 255)
     private String passwordHash;
 
+    @Column(unique = true)
+    private String email;
+
     @Column(nullable = false)
     private boolean enabled = true;
 
@@ -57,6 +60,14 @@ public class UserEntity {
 
     public void setPasswordHash(String passwordHash) {
         this.passwordHash = passwordHash;
+    }
+
+    public String getEmail() {
+        return email;
+    }
+
+    public void setEmail(String email) {
+        this.email = email;
     }
 
     public boolean isEnabled() {

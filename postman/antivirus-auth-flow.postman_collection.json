@@ -1,8 +1,8 @@
 {
   "info": {
-    "name": "Antivirus Auth Pair Flow",
+    "name": "Antivirus Auth + Licensing Flow",
     "_postman_id": "2bb08459-8ece-4d08-9d0b-bf39f4fca516",
-    "description": "Scenario: login -> protected -> refresh -> old refresh denied -> DB status check (manual).",
+    "description": "Scenario: auth flow (register/login/refresh) + licensing flow (create/activate/check/renew).",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -212,6 +212,174 @@
         "description": "Run SQL in PostgreSQL: SELECT id, token_jti, status, replaced_by_session_id, revoked_at FROM user_sessions ORDER BY id DESC;"
       },
       "response": []
+    },
+    {
+      "name": "License - Admin Login",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+              "const json = pm.response.json();",
+              "pm.collectionVariables.set('adminAccessToken', json.accessToken);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{adminUsername}}\",\n  \"password\": \"{{adminPassword}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/login",
+          "host": ["{{baseUrl}}"],
+          "path": ["api","auth","login"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "License - Create (Admin)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status is 201', function () { pm.response.to.have.status(201); });",
+              "const json = pm.response.json();",
+              "pm.collectionVariables.set('licenseCode', json.code);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{adminAccessToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"productId\": 1,\n  \"typeId\": 1,\n  \"ownerId\": 1,\n  \"deviceCount\": 3,\n  \"description\": \"Test license from Postman\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/licenses",
+          "host": ["{{baseUrl}}"],
+          "path": ["api","licenses"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "License - Activate",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+              "pm.test('Has ticket and signature', function () {",
+              "  const json = pm.response.json();",
+              "  pm.expect(json.ticket).to.exist;",
+              "  pm.expect(json.digitalSignature).to.be.a('string');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"activationKey\": \"{{licenseCode}}\",\n  \"deviceMac\": \"AA:BB:CC:DD:EE:01\",\n  \"deviceName\": \"PostmanPC\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/licenses/activate",
+          "host": ["{{baseUrl}}"],
+          "path": ["api","licenses","activate"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "License - Check",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+              "pm.test('License not blocked', function () {",
+              "  pm.expect(pm.response.json().ticket.blocked).to.eql(false);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"productId\": 1,\n  \"deviceMac\": \"AA:BB:CC:DD:EE:01\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/licenses/check",
+          "host": ["{{baseUrl}}"],
+          "path": ["api","licenses","check"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "License - Renew",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status is 200 or 400 (not yet eligible)', function () {",
+              "  pm.expect([200, 400]).to.include(pm.response.code);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"activationKey\": \"{{licenseCode}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/licenses/renew",
+          "host": ["{{baseUrl}}"],
+          "path": ["api","licenses","renew"]
+        }
+      },
+      "response": []
     }
   ],
   "variable": [
@@ -237,6 +405,22 @@
     },
     {
       "key": "oldRefreshToken",
+      "value": ""
+    },
+    {
+      "key": "adminUsername",
+      "value": "admin"
+    },
+    {
+      "key": "adminPassword",
+      "value": "admin12345"
+    },
+    {
+      "key": "adminAccessToken",
+      "value": ""
+    },
+    {
+      "key": "licenseCode",
       "value": ""
     }
   ]

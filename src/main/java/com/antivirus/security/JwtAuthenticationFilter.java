@@ -49,7 +49,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 SecurityContextHolder.getContext().setAuthentication(authentication);
             }
         } catch (Exception ignored) {
-            // Token is invalid or expired; request will fail on protected endpoints.
+            // Токен невалидный или истёк; запрос будет отклонён на защищённых эндпоинтах.
         }
 
         filterChain.doFilter(request, response);

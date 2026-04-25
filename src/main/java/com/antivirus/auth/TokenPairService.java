@@ -94,7 +94,7 @@ public class TokenPairService {
         UserSessionEntity session = new UserSessionEntity();
         session.setUser(user);
         session.setTokenJti(UUID.randomUUID().toString());
-        // refresh_token is NOT NULL in DB; set a unique placeholder before first insert.
+        // В БД поле refresh_token имеет ограничение NOT NULL; перед первой вставкой ставим уникальное временное значение.
         session.setRefreshToken("pending-" + UUID.randomUUID());
         session.setStatus(SessionStatus.ACTIVE);
         session.setIssuedAt(now);
