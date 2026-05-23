@@ -95,6 +95,16 @@ public class LicenseService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
 
         DeviceEntity device = deviceService.findOrCreateDevice(deviceMac, deviceName, user);
+        //Проверка на активацию лицензии на другом устройстве
+        DeviceLicenseEntity existingActivation = deviceLicenseRepository.findFirstByLicense(license).orElse(null);
+
+        if (existingActivation != null && !existingActivation.getDevice().getId().equals(device.getId())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "License is already activated on another device");
+        }
+
+        if (existingActivation != null) {
+            return buildTicketResponse(license, user.getId(), device.getId());
+        }
 
         boolean isFirstActivation = license.getFirstActivationDate() == null;
 

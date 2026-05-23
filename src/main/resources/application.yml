@@ -31,6 +31,14 @@ security:
     access-expiration-seconds: ${JWT_ACCESS_EXPIRATION_SECONDS:900}
     refresh-expiration-seconds: ${JWT_REFRESH_EXPIRATION_SECONDS:604800}
 
+signature:
+  key-store-path: ${SIGNATURE_KEYSTORE_PATH:certs/signing-keystore.p12}
+  key-store-type: ${SIGNATURE_KEYSTORE_TYPE:PKCS12}
+  key-store-password: ${SIGNATURE_KEYSTORE_PASSWORD:changeit}
+  key-alias: ${SIGNATURE_KEY_ALIAS:app-signing}
+  key-password: ${SIGNATURE_KEY_PASSWORD:}
+  algorithm: ${SIGNATURE_ALGORITHM:SHA256withRSA}
+
 management:
   endpoints:
     web:

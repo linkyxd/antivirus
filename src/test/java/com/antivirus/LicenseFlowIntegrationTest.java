@@ -1,5 +1,7 @@
 package com.antivirus;
 
+import com.antivirus.signature.SignatureService;
+import com.antivirus.ticket.Ticket;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -28,7 +30,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "spring.jpa.hibernate.ddl-auto=validate",
         "server.ssl.key-store=classpath:test-keystore.p12",
         "server.ssl.key-store-password=changeit",
-        "server.ssl.key-alias=server"
+        "server.ssl.key-alias=server",
+        "signature.key-store-path=classpath:test-keystore.p12",
+        "signature.key-store-password=changeit",
+        "signature.key-alias=server"
 })
 class LicenseFlowIntegrationTest {
 
@@ -37,6 +42,9 @@ class LicenseFlowIntegrationTest {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private SignatureService signatureService;
 
     @Test
     void fullLicenseLifecycle() throws Exception {
@@ -152,10 +160,15 @@ class LicenseFlowIntegrationTest {
                 .andExpect(jsonPath("$.digitalSignature").isNotEmpty())
                 .andReturn();
 
-        JsonNode ticketNode = objectMapper.readTree(activateResult.getResponse().getContentAsString())
-                .get("ticket");
+        JsonNode responseNode = objectMapper.readTree(activateResult.getResponse().getContentAsString());
+        JsonNode ticketNode = responseNode.get("ticket");
         assertNotNull(ticketNode.get("activationDate").asText());
         assertNotNull(ticketNode.get("expirationDate").asText());
+
+        String digitalSignature = responseNode.get("digitalSignature").asText();
+        Ticket ticket = objectMapper.treeToValue(ticketNode, Ticket.class);
+        assertTrue(signatureService.verify(ticket, digitalSignature),
+                "Подпись Ticket должна верифицироваться публичным ключом модуля ЭЦП");
 
         // Пользователь проверяет лицензию
         mockMvc.perform(post("/api/licenses/check")

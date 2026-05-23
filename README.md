@@ -111,3 +111,60 @@ Create base64 payload locally:
 
 Put this value into `TLS_KEYSTORE_BASE64`.  
 Workflow restores it to `certs/server-keystore.p12` during `package` job.
+
+## Digital signature module (ЭЦП)
+
+Модуль ЭЦП подписывает ответы лицензии (`Ticket`) по схеме:
+
+```
+Ticket -> JsonCanonicalizer (RFC 8785) -> UTF-8 bytes -> SHA256withRSA -> Base64
+```
+
+Компоненты в пакете `com.antivirus.signature`:
+
+- `SignatureProperties` — `@ConfigurationProperties("signature")` (путь к keystore, alias, пароли, алгоритм).
+- `SignatureKeyProvider` — однократная загрузка приватного ключа и сертификата.
+- `JsonCanonicalizer` — детерминированное представление JSON по RFC 8785.
+- `SignatureService` — фасад `sign(Object)` и `verify(Object, base64)`.
+
+Подключение к лицензии: [`TicketSigningService`](src/main/java/com/antivirus/ticket/TicketSigningService.java) делегирует подпись в `SignatureService`. Контроллер `/api/licenses/activate|check|renew` возвращает `TicketResponse{ ticket, digitalSignature }`.
+
+### Генерация хранилища подписи
+
+Отдельное хранилище, не пересекающееся с TLS keystore:
+
+```powershell
+keytool -genkeypair -alias app-signing -keyalg RSA -keysize 2048 `
+  -dname "CN=antivirus-signing" -validity 3650 `
+  -keystore certs/signing-keystore.p12 -storetype PKCS12 `
+  -storepass changeit -keypass changeit
+
+keytool -exportcert -alias app-signing -rfc `
+  -keystore certs/signing-keystore.p12 -storepass changeit `
+  -file certs/signing-public.pem
+```
+
+### Переменные окружения
+
+- `SIGNATURE_KEYSTORE_PATH` (по умолчанию `certs/signing-keystore.p12`)
+- `SIGNATURE_KEYSTORE_TYPE` (по умолчанию `PKCS12`)
+- `SIGNATURE_KEYSTORE_PASSWORD`
+- `SIGNATURE_KEY_ALIAS` (по умолчанию `app-signing`)
+- `SIGNATURE_KEY_PASSWORD` (если пусто — используется `SIGNATURE_KEYSTORE_PASSWORD`)
+- `SIGNATURE_ALGORITHM` (по умолчанию `SHA256withRSA`)
+
+### GitHub secrets и variables для ЭЦП
+
+Секреты:
+
+- `SIGNATURE_KEYSTORE_BASE64` — base64 от `signing-keystore.p12`:
+  ```powershell
+  [Convert]::ToBase64String([IO.File]::ReadAllBytes("certs/signing-keystore.p12"))
+  ```
+- `SIGNATURE_KEYSTORE_PASSWORD`, `SIGNATURE_KEY_ALIAS`, `SIGNATURE_KEY_PASSWORD`.
+
+Переменные (Settings -> Secrets and variables -> Actions -> Variables):
+
+- `SIGNATURE_PUBLIC_KEY` — содержимое `certs/signing-public.pem` (PEM с заголовком `-----BEGIN CERTIFICATE-----`). Это публичный ключ для верификации подписи на стороне клиента.
+
+В CI workflow ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) шаг `Materialize signing keystore from GitHub Secret` восстанавливает `certs/signing-keystore.p12` из `SIGNATURE_KEYSTORE_BASE64`, а шаг `Export signing public key from CI variable` пишет `certs/signing-public.pem` из `vars.SIGNATURE_PUBLIC_KEY`.

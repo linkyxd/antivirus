@@ -57,13 +57,29 @@ jobs:
           java-version: "17"
           cache: maven
 
-      - name: Materialize keystore from GitHub Secret
+      - name: Materialize TLS keystore from GitHub Secret
         env:
           TLS_KEYSTORE_BASE64: ${{ secrets.TLS_KEYSTORE_BASE64 }}
         if: ${{ env.TLS_KEYSTORE_BASE64 != '' }}
         run: |
           mkdir -p certs
           echo "$TLS_KEYSTORE_BASE64" | base64 -d > certs/server-keystore.p12
+
+      - name: Materialize signing keystore from GitHub Secret
+        env:
+          SIGNATURE_KEYSTORE_BASE64: ${{ secrets.SIGNATURE_KEYSTORE_BASE64 }}
+        if: ${{ env.SIGNATURE_KEYSTORE_BASE64 != '' }}
+        run: |
+          mkdir -p certs
+          echo "$SIGNATURE_KEYSTORE_BASE64" | base64 -d > certs/signing-keystore.p12
+
+      - name: Export signing public key from CI variable
+        env:
+          SIGNATURE_PUBLIC_KEY: ${{ vars.SIGNATURE_PUBLIC_KEY }}
+        if: ${{ env.SIGNATURE_PUBLIC_KEY != '' }}
+        run: |
+          mkdir -p certs
+          printf '%s\n' "$SIGNATURE_PUBLIC_KEY" > certs/signing-public.pem
 
       - name: Package
         env:
@@ -74,6 +90,9 @@ jobs:
           JWT_REFRESH_SECRET: ${{ secrets.JWT_REFRESH_SECRET }}
           TLS_KEYSTORE_PASSWORD: ${{ secrets.TLS_KEYSTORE_PASSWORD }}
           TLS_KEY_ALIAS: ${{ secrets.TLS_KEY_ALIAS }}
+          SIGNATURE_KEYSTORE_PASSWORD: ${{ secrets.SIGNATURE_KEYSTORE_PASSWORD }}
+          SIGNATURE_KEY_ALIAS: ${{ secrets.SIGNATURE_KEY_ALIAS }}
+          SIGNATURE_KEY_PASSWORD: ${{ secrets.SIGNATURE_KEY_PASSWORD }}
         run: mvn -B -ntp -DskipTests package
 
       - name: Upload artifact

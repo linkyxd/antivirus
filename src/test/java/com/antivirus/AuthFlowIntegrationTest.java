@@ -30,7 +30,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "spring.jpa.hibernate.ddl-auto=validate",
         "server.ssl.key-store=classpath:test-keystore.p12",
         "server.ssl.key-store-password=changeit",
-        "server.ssl.key-alias=server"
+        "server.ssl.key-alias=server",
+        "signature.key-store-path=classpath:test-keystore.p12",
+        "signature.key-store-password=changeit",
+        "signature.key-alias=server"
 })
 class AuthFlowIntegrationTest {
 
