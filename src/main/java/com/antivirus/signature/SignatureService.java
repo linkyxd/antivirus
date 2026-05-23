@@ -74,6 +74,47 @@ public class SignatureService {
         return verify(payload, base64Signature, keyProvider.getPublicKey());
     }
 
+    /**
+     * Подписывает уже сформированный массив байт без канонизации.
+     *
+     * <p>Используется для бинарных документов (например, манифеста binary API), которые
+     * представляют собой готовый набор байт и не должны повторно превращаться в
+     * объектную форму. Возвращает сырые байты подписи (RSA), без Base64.</p>
+     */
+    public byte[] signBytes(byte[] payload) {
+        if (payload == null) {
+            throw new SignatureException(SignatureException.Category.CRYPTO,
+                    "Payload to sign must not be null");
+        }
+        return computeSignature(payload);
+    }
+
+    /**
+     * Проверяет подпись готового массива байт переданным публичным ключом.
+     */
+    public boolean verifyBytes(byte[] payload, byte[] signatureBytes, PublicKey publicKey) {
+        if (payload == null || signatureBytes == null) {
+            throw new SignatureException(SignatureException.Category.CRYPTO,
+                    "Payload and signature must not be null");
+        }
+        try {
+            Signature sig = Signature.getInstance(properties.getAlgorithm());
+            sig.initVerify(publicKey);
+            sig.update(payload);
+            return sig.verify(signatureBytes);
+        } catch (GeneralSecurityException e) {
+            throw new SignatureException(SignatureException.Category.CRYPTO,
+                    "Failed to verify byte-array signature", e);
+        }
+    }
+
+    /**
+     * Проверяет подпись массива байт публичным ключом из настроенного keystore.
+     */
+    public boolean verifyBytes(byte[] payload, byte[] signatureBytes) {
+        return verifyBytes(payload, signatureBytes, keyProvider.getPublicKey());
+    }
+
     private byte[] computeSignature(byte[] canonicalBytes) {
         try {
             Signature sig = Signature.getInstance(properties.getAlgorithm());

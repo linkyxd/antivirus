@@ -50,6 +50,10 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/signatures").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/signatures/increment").authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/signatures/by-ids").authenticated()
+                        // binary export: бинарная база и инкремент — для клиентов антивируса (USER+)
+                        .requestMatchers(HttpMethod.GET, "/api/binary/signatures/full").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/binary/signatures/increment").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/binary/signatures/by-ids").authenticated()
                         // malware signatures: запись и просмотр истории/аудита — только ADMIN
                         .requestMatchers(HttpMethod.GET, "/api/signatures/*/history").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/signatures/*/audit").hasRole("ADMIN")

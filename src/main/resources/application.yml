@@ -39,6 +39,11 @@ signature:
   key-password: ${SIGNATURE_KEY_PASSWORD:}
   algorithm: ${SIGNATURE_ALGORITHM:SHA256withRSA}
 
+binary:
+  surname: ${BINARY_SURNAME:Polyatykin}
+  manifest-version: ${BINARY_MANIFEST_VERSION:1}
+  data-version: ${BINARY_DATA_VERSION:1}
+
 management:
   endpoints:
     web:

@@ -202,7 +202,55 @@ REST-модуль управления антивирусными сигнату
 ### Postman (проверка модуля сигнатур)
 
 1. Импорт: [`postman/antivirus-malware-signatures.postman_collection.json`](postman/antivirus-malware-signatures.postman_collection.json).
-2. Запустить Collection Runner по папкам `1` → `2` → `3` → `4` (сверху вниз).
+2. Запустить Collection Runner по папкам `1` → `2` → `3` → `4` → `5` (сверху вниз).
 3. Тестовые скрипты в коллекции автоматически проверяют чек-лист методички:
    create/update пересчитывают подпись, delete логический, history и audit заполняются,
    полная выгрузка не содержит `DELETED`, инкремент содержит.
+
+### Binary API (выдача клиентам, multipart/mixed)
+
+Поверх REST-API реализована бинарная выдача сигнатур (пакет `com.antivirus.binary`)
+для агентов антивируса. Каждый эндпоинт возвращает `multipart/mixed` с двумя
+бинарными частями — `manifest.bin` и `data.bin`.
+
+| Метод | Путь | Роль | Что отдаёт |
+|-------|------|------|------------|
+| GET  | `/api/binary/signatures/full` | USER+ | Полная база, `exportType=FULL`, только `ACTUAL` |
+| GET  | `/api/binary/signatures/increment?since=ISO8601` | USER+ | Инкремент, `exportType=INCREMENT`, включая `DELETED` |
+| POST | `/api/binary/signatures/by-ids` | USER+ | Выборка по UUID, `exportType=BY_IDS` |
+
+Структура `manifest.bin` (BigEndian, см.
+[`ManifestSerializer`](src/main/java/com/antivirus/binary/ManifestSerializer.java)):
+
+- header: magic `MF-<surname>` (uint16-длина + UTF-8) + uint16 version + uint8 exportType
+  (`0=FULL, 1=INCREMENT, 2=BY_IDS`) + int64 `generatedAtEpochMillis` + int64
+  `sinceEpochMillis` (`-1` для FULL/BY_IDS) + uint32 recordCount + 32 байта SHA-256 от `data.bin`;
+- entries: 16 байт UUID + uint8 status (`0=ACTUAL, 1=DELETED`) + int64 `updatedAtEpochMillis`
+  + uint64 `dataOffset` + uint32 `dataLength` + uint32+bytes `recordSignatureBytes`
+  (декодированный Base64 уже существующего поля `digitalSignatureBase64` — запись
+  **не подписывается заново**);
+- trailer: uint32+bytes — подпись манифеста (`SHA256withRSA`) над всеми байтами выше trailer'а
+  через [`SignatureService.signBytes`](src/main/java/com/antivirus/signature/SignatureService.java).
+
+Структура `data.bin`
+([`DataSerializer`](src/main/java/com/antivirus/binary/DataSerializer.java)):
+
+- header: magic `DB-<surname>` (uint16-длина + UTF-8) + uint16 version + uint32 recordCount;
+- record: `threatName` (UTF-8), `firstBytes`/`remainderHash` (raw, hex декодирован),
+  int64 `remainderLength`, `fileType` (UTF-8), int64 `offsetStart`, int64 `offsetEnd`.
+
+В `data.bin` намеренно **нет** `id`, `status`, `updatedAt`, `digitalSignatureBase64` —
+эти поля принадлежат манифесту (раздел 6.3 методички).
+
+Конфигурация (см. [`application.yml`](src/main/resources/application.yml)):
+
+- `binary.surname` / переменная `BINARY_SURNAME` — фамилия в magic-полях
+  (`MF-<surname>` и `DB-<surname>`); по умолчанию `Polyatykin`;
+- `binary.manifest-version`, `binary.data-version` — версии форматов (для будущей эволюции).
+
+Round-trip покрывают:
+[`BinaryProtocolRoundTripTest`](src/test/java/com/antivirus/binary/BinaryProtocolRoundTripTest.java)
+(сериализация/парсинг каждого поля, проверка SHA-256 и подписи манифеста) и
+[`BinarySignatureFlowIntegrationTest`](src/test/java/com/antivirus/BinarySignatureFlowIntegrationTest.java)
+(MockMvc-сценарий поверх Spring Boot: FULL/INCREMENT/BY_IDS, 400 без `since`,
+подпись каждой записи в манифесте равна её `digitalSignatureBase64`, не пересчитывается).
