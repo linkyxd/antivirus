@@ -1,0 +1,379 @@
+{
+  "info": {
+    "name": "Antivirus — ЭЦП (Ticket + digitalSignature)",
+    "_postman_id": "a7f3c2e1-9b4d-4e8a-ecp0-antivirus2026",
+    "description": "Проверка модуля электронной цифровой подписи через API лицензий.\n\n**Перед запуском:**\n1. PostgreSQL: БД `antivirus`, приложение запущено (`mvn spring-boot:run`).\n2. Файл `certs/signing-keystore.p12` (alias `app-signing`, пароль `changeit`).\n3. В PostgreSQL выполнить (один раз):\n```sql\nINSERT INTO product (name, is_blocked) VALUES ('Antivirus Pro', false);\nINSERT INTO license_type (name, default_duration_in_days, description)\nVALUES ('ANNUAL', 365, 'Annual license');\n```\n4. Postman: Settings → SSL certificate verification → **OFF** (самоподписанный TLS).\n\n**Порядок (Collection Runner):** сверху вниз по папкам 1 → 2 → 3.\n\n**Успех ЭЦП:** в ответах `activate` и `check` есть `ticket` и непустая Base64-строка `digitalSignature` (~300+ символов для RSA-2048).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "0. Health",
+      "item": [
+        {
+          "name": "Actuator health",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Server is UP', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().status).to.eql('UP');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/actuator/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["actuator", "health"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "1. Auth",
+      "item": [
+        {
+          "name": "Register client user",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Created or already exists (201/409)', function () {",
+                  "  pm.expect([201, 409]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{clientUsername}}\",\n  \"password\": \"{{clientPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "register"]
+            },
+            "description": "Опционально. Можно пропустить, если используете встроенного user/user12345 — тогда сразу «Login client user»."
+          },
+          "response": []
+        },
+        {
+          "name": "Login admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Admin login 200', function () { pm.response.to.have.status(200); });",
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('adminAccessToken', json.accessToken);",
+                  "pm.test('Admin has ROLE_ADMIN', function () {",
+                  "  pm.expect(json.roles).to.include('ROLE_ADMIN');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{adminUsername}}\",\n  \"password\": \"{{adminPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Login client user",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Client login 200', function () { pm.response.to.have.status(200); });",
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('accessToken', json.accessToken);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{clientUsername}}\",\n  \"password\": \"{{clientPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            },
+            "description": "По умолчанию clientUsername=ecp_client. Либо замените на user / user12345."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "2. License + ЭЦП",
+      "item": [
+        {
+          "name": "Create license (admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('License created 201', function () { pm.response.to.have.status(201); });",
+                  "const json = pm.response.json();",
+                  "pm.expect(json.code).to.be.a('string').and.not.empty;",
+                  "pm.collectionVariables.set('licenseCode', json.code);",
+                  "console.log('activationKey (license code):', json.code);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminAccessToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productId\": {{productId}},\n  \"typeId\": {{typeId}},\n  \"ownerId\": {{ownerId}},\n  \"deviceCount\": 3,\n  \"description\": \"ECP test license (Postman)\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/licenses",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "licenses"]
+            },
+            "description": "Требует productId=1, typeId=1 в БД (см. описание коллекции)."
+          },
+          "response": []
+        },
+        {
+          "name": "Activate license → Ticket + digitalSignature",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Activate 200', function () { pm.response.to.have.status(200); });",
+                  "const json = pm.response.json();",
+                  "pm.test('Response has ticket object', function () {",
+                  "  pm.expect(json.ticket).to.be.an('object');",
+                  "});",
+                  "pm.test('Ticket has required fields', function () {",
+                  "  const t = json.ticket;",
+                  "  pm.expect(t.serverDate).to.exist;",
+                  "  pm.expect(t.ticketLifetimeSeconds).to.eql(600);",
+                  "  pm.expect(t.activationDate).to.exist;",
+                  "  pm.expect(t.expirationDate).to.exist;",
+                  "  pm.expect(t.userId).to.exist;",
+                  "  pm.expect(t.deviceId).to.exist;",
+                  "  pm.expect(t.blocked).to.eql(false);",
+                  "});",
+                  "pm.test('digitalSignature is non-empty Base64 (RSA-2048)', function () {",
+                  "  pm.expect(json.digitalSignature).to.be.a('string').and.not.empty;",
+                  "  pm.expect(json.digitalSignature).to.match(/^[A-Za-z0-9+/]+=*$/);",
+                  "  pm.expect(json.digitalSignature.length).to.be.above(200);",
+                  "});",
+                  "pm.collectionVariables.set('digitalSignature', json.digitalSignature);",
+                  "pm.collectionVariables.set('lastTicketJson', JSON.stringify(json.ticket));",
+                  "console.log('digitalSignature (first 80 chars):', json.digitalSignature.substring(0, 80) + '...');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"activationKey\": \"{{licenseCode}}\",\n  \"deviceMac\": \"{{deviceMac}}\",\n  \"deviceName\": \"Postman-ECP-PC\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/licenses/activate",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "licenses", "activate"]
+            },
+            "description": "Подпись: Ticket → RFC 8785 JSON → UTF-8 → SHA256withRSA → Base64 в поле digitalSignature."
+          },
+          "response": []
+        },
+        {
+          "name": "Activate again (signature must change)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Second activate 200', function () { pm.response.to.have.status(200); });",
+                  "const json = pm.response.json();",
+                  "const prev = pm.collectionVariables.get('digitalSignature');",
+                  "pm.test('digitalSignature still present', function () {",
+                  "  pm.expect(json.digitalSignature).to.be.a('string').and.not.empty;",
+                  "});",
+                  "pm.test('digitalSignature changed (serverDate in ticket changed)', function () {",
+                  "  pm.expect(json.digitalSignature).to.not.eql(prev);",
+                  "});",
+                  "pm.collectionVariables.set('digitalSignature', json.digitalSignature);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"activationKey\": \"{{licenseCode}}\",\n  \"deviceMac\": \"{{deviceMac}}\",\n  \"deviceName\": \"Postman-ECP-PC\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/licenses/activate",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "licenses", "activate"]
+            },
+            "description": "Повторная активация на том же устройстве — новый ticket.serverDate → другая подпись."
+          },
+          "response": []
+        },
+        {
+          "name": "Check license → Ticket + digitalSignature",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Check 200', function () { pm.response.to.have.status(200); });",
+                  "const json = pm.response.json();",
+                  "pm.test('Has ticket and digitalSignature', function () {",
+                  "  pm.expect(json.ticket).to.be.an('object');",
+                  "  pm.expect(json.digitalSignature).to.be.a('string').and.not.empty;",
+                  "  pm.expect(json.ticket.blocked).to.eql(false);",
+                  "});",
+                  "pm.test('digitalSignature is valid Base64', function () {",
+                  "  pm.expect(json.digitalSignature).to.match(/^[A-Za-z0-9+/]+=*$/);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productId\": {{productId}},\n  \"deviceMac\": \"{{deviceMac}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/licenses/check",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "licenses", "check"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Renew (optional, often 400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Renew 200 with signature OR 400 not eligible yet', function () {",
+                  "  pm.expect([200, 400]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "  const json = pm.response.json();",
+                  "  pm.test('Renew returns signed ticket', function () {",
+                  "    pm.expect(json.digitalSignature).to.be.a('string').and.not.empty;",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"activationKey\": \"{{licenseCode}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/licenses/renew",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "licenses", "renew"]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "https://localhost:8443" },
+    { "key": "adminUsername", "value": "admin" },
+    { "key": "adminPassword", "value": "admin12345" },
+    { "key": "clientUsername", "value": "ecp_client" },
+    { "key": "clientPassword", "value": "EcpTest12345" },
+    { "key": "productId", "value": "1" },
+    { "key": "typeId", "value": "1" },
+    { "key": "ownerId", "value": "1" },
+    { "key": "deviceMac", "value": "AA:BB:CC:DD:EE:01" },
+    { "key": "adminAccessToken", "value": "" },
+    { "key": "accessToken", "value": "" },
+    { "key": "licenseCode", "value": "" },
+    { "key": "digitalSignature", "value": "" },
+    { "key": "lastTicketJson", "value": "" }
+  ]
+}

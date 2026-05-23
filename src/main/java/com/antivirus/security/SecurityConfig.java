@@ -46,6 +46,16 @@ public class SecurityConfig {
                                 "/api/licenses/check",
                                 "/api/licenses/renew"
                         ).authenticated()
+                        // malware signatures: чтение разрешено USER+ (любой аутентифицированный)
+                        .requestMatchers(HttpMethod.GET, "/api/signatures").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/signatures/increment").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/signatures/by-ids").authenticated()
+                        // malware signatures: запись и просмотр истории/аудита — только ADMIN
+                        .requestMatchers(HttpMethod.GET, "/api/signatures/*/history").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/signatures/*/audit").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/signatures").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/signatures/*").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/signatures/*").hasRole("ADMIN")
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )

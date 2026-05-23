@@ -168,3 +168,41 @@ keytool -exportcert -alias app-signing -rfc `
 - `SIGNATURE_PUBLIC_KEY` — содержимое `certs/signing-public.pem` (PEM с заголовком `-----BEGIN CERTIFICATE-----`). Это публичный ключ для верификации подписи на стороне клиента.
 
 В CI workflow ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) шаг `Materialize signing keystore from GitHub Secret` восстанавливает `certs/signing-keystore.p12` из `SIGNATURE_KEYSTORE_BASE64`, а шаг `Export signing public key from CI variable` пишет `certs/signing-public.pem` из `vars.SIGNATURE_PUBLIC_KEY`.
+
+### Postman (проверка ЭЦП вручную)
+
+1. Импорт: [`postman/antivirus-signature-ecp.postman_collection.json`](postman/antivirus-signature-ecp.postman_collection.json) и опционально environment [`postman/antivirus-local.postman_environment.json`](postman/antivirus-local.postman_environment.json).
+2. Postman → Settings → **SSL certificate verification: OFF**.
+3. Запустить Collection Runner по папкам `0` → `1` → `2` (сверху вниз).
+
+## Malware signatures API
+
+REST-модуль управления антивирусными сигнатурами (пакет `com.antivirus.malware`) реализует
+8 операций по методичке. На каждое создание / изменение / удаление пересчитывается
+ЭЦП через тот же `SignatureService` (см. раздел выше).
+
+| Метод | Путь | Роль | Что делает |
+|-------|------|------|------------|
+| GET | `/api/signatures` | USER+ | Полная выгрузка (только `ACTUAL`) |
+| GET | `/api/signatures/increment?since=ISO8601` | USER+ | Все записи с `updatedAt > since`, включая `DELETED` |
+| POST | `/api/signatures/by-ids` | USER+ | Выборка по списку UUID |
+| POST | `/api/signatures` | ADMIN | Создание (status=ACTUAL, audit `CREATED`) |
+| PUT | `/api/signatures/{id}` | ADMIN | Обновление (snapshot в history, audit `UPDATED` с fieldsChanged) |
+| DELETE | `/api/signatures/{id}` | ADMIN | Логическое удаление (status=DELETED, snapshot в history, audit `DELETED`) → 204 |
+| GET | `/api/signatures/{id}/history` | ADMIN | Все версии записи, отсортированы по `versionCreatedAt desc` |
+| GET | `/api/signatures/{id}/audit` | ADMIN | Журнал действий, отсортирован по `changedAt desc` |
+
+Подписываются ровно поля payload (`MalwareSignaturePayload`):
+`threatName, firstBytesHex, remainderHashHex, remainderLength, fileType, offsetStart, offsetEnd, status`.
+`updatedAt` и сама `digitalSignatureBase64` в подпись не входят — это требование методички.
+
+Схема БД: миграция [`V4__malware_signatures.sql`](src/main/resources/db/migration/V4__malware_signatures.sql)
+(таблицы `signatures`, `signatures_history`, `signatures_audit` + индексы).
+
+### Postman (проверка модуля сигнатур)
+
+1. Импорт: [`postman/antivirus-malware-signatures.postman_collection.json`](postman/antivirus-malware-signatures.postman_collection.json).
+2. Запустить Collection Runner по папкам `1` → `2` → `3` → `4` (сверху вниз).
+3. Тестовые скрипты в коллекции автоматически проверяют чек-лист методички:
+   create/update пересчитывают подпись, delete логический, history и audit заполняются,
+   полная выгрузка не содержит `DELETED`, инкремент содержит.
